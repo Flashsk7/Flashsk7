@@ -1,0 +1,989 @@
+const ComponentFunction = function() {
+  // @section:imports @depends:[]
+  var React = require('react');
+  var useState = React.useState;
+  var useEffect = React.useEffect;
+  var useContext = React.useContext;
+  var useMemo = React.useMemo;
+  var useCallback = React.useCallback;
+  var RN = require('react-native');
+  var View = RN.View;
+  var Text = RN.Text;
+  var StyleSheet = RN.StyleSheet;
+  var ScrollView = RN.ScrollView;
+  var TouchableOpacity = RN.TouchableOpacity;
+  var TextInput = RN.TextInput;
+  var Modal = RN.Modal;
+  var Alert = RN.Alert;
+  var Platform = RN.Platform;
+  var StatusBar = RN.StatusBar;
+  var ActivityIndicator = RN.ActivityIndicator;
+  var FlatList = RN.FlatList;
+  var Dimensions = RN.Dimensions;
+  var Icons = require('@expo/vector-icons');
+  var MaterialIcons = Icons.MaterialIcons;
+  var Ionicons = Icons.Ionicons;
+  var createBottomTabNavigator = require('@react-navigation/bottom-tabs').createBottomTabNavigator;
+  var useSafeAreaInsets = require('react-native-safe-area-context').useSafeAreaInsets;
+  var platformHooks = require('platform-hooks');
+  var useQuery = platformHooks.useQuery;
+  var useMutation = platformHooks.useMutation;
+  // @end:imports
+
+  // @section:theme @depends:[]
+  var primaryColor = '#1E40AF';
+  var accentColor = '#3B82F6';
+  var backgroundColor = '#0F172A';
+  var cardColor = '#1E293B';
+  var textPrimary = '#F1F5F9';
+  var textSecondary = '#94A3B8';
+  var successColor = '#10B981';
+  var errorColor = '#EF4444';
+  var warningColor = '#F59E0B';
+  var borderColor = '#334155';
+  var TAB_MENU_HEIGHT = Platform.OS === 'web' ? 56 : 49;
+  var SCROLL_EXTRA_PADDING = 16;
+  var WEB_TAB_MENU_PADDING = 90;
+  var FAB_SPACING = 16;
+  // @end:theme
+
+  // @section:navigation-setup @depends:[]
+  var Tab = createBottomTabNavigator();
+  // @end:navigation-setup
+
+  // @section:ThemeContext @depends:[theme]
+  var ThemeContext = React.createContext({ theme: { colors: { primary: primaryColor, accent: accentColor, background: backgroundColor, card: cardColor, textPrimary: textPrimary, textSecondary: textSecondary, border: borderColor, success: successColor, error: errorColor, warning: warningColor } } });
+  var ThemeProvider = function(props) {
+    var lightTheme = useMemo(function() {
+      return { colors: { primary: primaryColor, accent: accentColor, background: backgroundColor, card: cardColor, textPrimary: textPrimary, textSecondary: textSecondary, border: borderColor, success: successColor, error: errorColor, warning: warningColor } };
+    }, []);
+    var value = useMemo(function() { return { theme: lightTheme }; }, [lightTheme]);
+    return React.createElement(ThemeContext.Provider, { value: value }, props.children);
+  };
+  var useTheme = function() { return useContext(ThemeContext); };
+  // @end:ThemeContext
+
+  // @section:static-data @depends:[]
+  var LEAGUES = [
+    { id: 'epl', name: 'Premier League', country: 'England', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+    { id: 'laliga', name: 'La Liga', country: 'Spain', flag: '🇪🇸' },
+    { id: 'bundesliga', name: 'Bundesliga', country: 'Germany', flag: '🇩🇪' },
+    { id: 'seriea', name: 'Serie A', country: 'Italy', flag: '🇮🇹' },
+    { id: 'ligue1', name: 'Ligue 1', country: 'France', flag: '🇫🇷' },
+    { id: 'ucl', name: 'UEFA Champions League', country: 'Europe', flag: '🇪🇺' },
+    { id: 'uel', name: 'UEFA Europa League', country: 'Europe', flag: '🇪🇺' },
+    { id: 'mls', name: 'MLS', country: 'USA', flag: '🇺🇸' },
+    { id: 'eredivisie', name: 'Eredivisie', country: 'Netherlands', flag: '🇳🇱' },
+    { id: 'other', name: 'Other', country: 'International', flag: '🌍' }
+  ];
+
+  var OUTCOME_LABELS = { home_win: 'Home Win', draw: 'Draw', away_win: 'Away Win' };
+  var OUTCOME_COLORS = { home_win: successColor, draw: warningColor, away_win: accentColor };
+  var OUTCOME_ICONS = { home_win: 'emoji-events', draw: 'handshake', away_win: 'swap-horiz' };
+
+  var generateId = function() {
+    return 'pred_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 9);
+  };
+
+  var formatDate = function(dateStr) {
+    if (!dateStr) return 'TBD';
+    var parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return months[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+  };
+
+  var getLeagueName = function(leagueId) {
+    var league = LEAGUES.filter(function(l) { return l.id === leagueId; })[0];
+    return league ? league.name : leagueId;
+  };
+
+  var getLeagueFlag = function(leagueId) {
+    var league = LEAGUES.filter(function(l) { return l.id === leagueId; })[0];
+    return league ? league.flag : '🌍';
+  };
+  // @end:static-data
+
+  // @section:DatePickerInput @depends:[imports]
+  var DatePickerInput = function(props) {
+    var parsed = props.value ? props.value.split('-') : null;
+    var nowYear = new Date().getFullYear();
+    var nowMonth = new Date().getMonth() + 1;
+    var nowDay = new Date().getDate();
+    var initYear = parsed ? parseInt(parsed[0], 10) : nowYear;
+    var initMonth = parsed ? parseInt(parsed[1], 10) : nowMonth;
+    var initDay = parsed ? parseInt(parsed[2], 10) : nowDay;
+    var showState = useState(false);
+    var showPicker = showState[0];
+    var setShow = showState[1];
+    var yearState = useState(initYear);
+    var selYear = yearState[0];
+    var setSelYear = yearState[1];
+    var monthState = useState(initMonth);
+    var selMonth = monthState[0];
+    var setSelMonth = monthState[1];
+    var dayState = useState(initDay);
+    var selDay = dayState[0];
+    var setSelDay = dayState[1];
+    useEffect(function() {
+      var maxDay = new Date(selYear, selMonth, 0).getDate();
+      if (selDay > maxDay) { setSelDay(maxDay); }
+    }, [selYear, selMonth]);
+    var pad = function(n) { return n < 10 ? '0' + n : String(n); };
+    var handleConfirm = function() {
+      if (props.onChange) { props.onChange(selYear + '-' + pad(selMonth) + '-' + pad(selDay)); }
+      setShow(false);
+    };
+    var displayValue = props.value ? (pad(selMonth) + '/' + pad(selDay) + '/' + selYear) : (props.placeholder || 'Select date');
+    if (Platform.OS === 'web') {
+      return React.createElement('input', { type: 'date', value: props.value || '', onChange: function(e) { if (props.onChange) { props.onChange(e.target.value); } }, style: Object.assign({}, { padding: 12, border: '1px solid ' + borderColor, borderRadius: 8, fontSize: 16, width: '100%', boxSizing: 'border-box', color: textPrimary, backgroundColor: '#0F172A', outline: 'none' }, props.style) });
+    }
+    var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var years = [];
+    for (var y = nowYear - 2; y <= nowYear + 3; y++) { years.push(y); }
+    var daysInMonth = new Date(selYear, selMonth, 0).getDate();
+    var days = [];
+    for (var d = 1; d <= daysInMonth; d++) { days.push(d); }
+    var colStyle = { flex: 1, maxHeight: 180 };
+    var itemStyleFn = function(active) { return { paddingVertical: 10, alignItems: 'center', backgroundColor: active ? '#1E3A8A' : 'transparent' }; };
+    var itemTextStyleFn = function(active) { return { fontSize: 16, color: active ? '#93C5FD' : textSecondary, fontWeight: active ? 'bold' : 'normal' }; };
+    return React.createElement(View, { componentId: props.componentId },
+      React.createElement(TouchableOpacity, { onPress: function() { setShow(true); }, style: Object.assign({}, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: borderColor, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 14, backgroundColor: '#0F172A' }, props.style) },
+        React.createElement(Text, { style: { fontSize: 15, color: props.value ? textPrimary : textSecondary } }, displayValue),
+        React.createElement(MaterialIcons, { name: 'calendar-today', size: 20, color: accentColor })
+      ),
+      React.createElement(Modal, { visible: showPicker, transparent: true, animationType: 'slide', onRequestClose: function() { setShow(false); } },
+        React.createElement(View, { style: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' } },
+          React.createElement(View, { style: { backgroundColor: cardColor, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36 } },
+            React.createElement(Text, { style: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, color: textPrimary } }, 'Select Match Date'),
+            React.createElement(View, { style: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden' } },
+              React.createElement(ScrollView, { style: colStyle, showsVerticalScrollIndicator: false },
+                MONTHS.map(function(m, i) {
+                  var active = selMonth === i + 1;
+                  return React.createElement(TouchableOpacity, { key: String(i), onPress: function() { setSelMonth(i + 1); }, style: itemStyleFn(active) },
+                    React.createElement(Text, { style: itemTextStyleFn(active) }, m));
+                })
+              ),
+              React.createElement(ScrollView, { style: colStyle, showsVerticalScrollIndicator: false },
+                days.map(function(d) {
+                  var active = selDay === d;
+                  return React.createElement(TouchableOpacity, { key: String(d), onPress: function() { setSelDay(d); }, style: itemStyleFn(active) },
+                    React.createElement(Text, { style: itemTextStyleFn(active) }, String(d)));
+                })
+              ),
+              React.createElement(ScrollView, { style: colStyle, showsVerticalScrollIndicator: false },
+                years.map(function(yr) {
+                  var active = selYear === yr;
+                  return React.createElement(TouchableOpacity, { key: String(yr), onPress: function() { setSelYear(yr); }, style: itemStyleFn(active) },
+                    React.createElement(Text, { style: itemTextStyleFn(active) }, String(yr)));
+                })
+              )
+            ),
+            React.createElement(TouchableOpacity, { onPress: handleConfirm, style: { backgroundColor: primaryColor, borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 16 } },
+              React.createElement(Text, { style: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' } }, 'Confirm')
+            ),
+            React.createElement(TouchableOpacity, { onPress: function() { setShow(false); }, style: { padding: 14, alignItems: 'center', marginTop: 4 } },
+              React.createElement(Text, { style: { color: textSecondary, fontSize: 16 } }, 'Cancel')
+            )
+          )
+        )
+      )
+    );
+  };
+  // @end:DatePickerInput
+
+  // @section:LeaguePickerModal @depends:[static-data]
+  var LeaguePickerModal = function(props) {
+    var visible = props.visible;
+    var onClose = props.onClose;
+    var onSelect = props.onSelect;
+    var selected = props.selected;
+    return React.createElement(Modal, { visible: visible, transparent: true, animationType: 'slide', onRequestClose: onClose },
+      React.createElement(View, { style: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.7)' } },
+        React.createElement(View, { style: { backgroundColor: cardColor, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 20, paddingBottom: 36, maxHeight: '75%' } },
+          React.createElement(View, { style: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginBottom: 16 } },
+            React.createElement(Text, { style: { fontSize: 18, fontWeight: 'bold', color: textPrimary } }, 'Select League'),
+            React.createElement(TouchableOpacity, { onPress: onClose, componentId: 'league-picker-close' },
+              React.createElement(MaterialIcons, { name: 'close', size: 24, color: textSecondary })
+            )
+          ),
+          React.createElement(ScrollView, { showsVerticalScrollIndicator: false },
+            LEAGUES.map(function(league) {
+              var isSelected = selected === league.id;
+              return React.createElement(TouchableOpacity, {
+                key: league.id,
+                onPress: function() { onSelect(league.id); onClose(); },
+                componentId: 'league-option-' + league.id,
+                style: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: isSelected ? '#1E3A8A' : 'transparent', marginHorizontal: 12, borderRadius: 10, marginBottom: 4 }
+              },
+                React.createElement(Text, { style: { fontSize: 22, marginRight: 14 } }, league.flag),
+                React.createElement(View, { style: { flex: 1 } },
+                  React.createElement(Text, { style: { fontSize: 15, fontWeight: '600', color: textPrimary } }, league.name),
+                  React.createElement(Text, { style: { fontSize: 12, color: textSecondary, marginTop: 2 } }, league.country)
+                ),
+                isSelected ? React.createElement(MaterialIcons, { name: 'check-circle', size: 20, color: accentColor }) : null
+              );
+            })
+          )
+        )
+      )
+    );
+  };
+  // @end:LeaguePickerModal
+
+  // @section:ResultModal @depends:[static-data]
+  var ResultModal = function(props) {
+    var visible = props.visible;
+    var onClose = props.onClose;
+    var onSave = props.onSave;
+    var prediction = props.prediction;
+    var selectedState = useState('');
+    var selected = selectedState[0];
+    var setSelected = selectedState[1];
+    useEffect(function() { if (!visible) { setSelected(''); } }, [visible]);
+    if (!prediction) return null;
+    return React.createElement(Modal, { visible: visible, transparent: true, animationType: 'fade', onRequestClose: onClose },
+      React.createElement(View, { style: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.75)', padding: 24 } },
+        React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: borderColor } },
+          React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textPrimary, marginBottom: 6 } }, 'Record Result'),
+          React.createElement(Text, { style: { fontSize: 13, color: textSecondary, marginBottom: 20 } }, prediction.home_team + ' vs ' + prediction.away_team),
+          React.createElement(Text, { style: { fontSize: 14, color: textSecondary, marginBottom: 12 } }, 'What was the actual result?'),
+          ['home_win', 'draw', 'away_win'].map(function(outcome) {
+            var isSelected = selected === outcome;
+            var isPredicted = prediction.predicted_outcome === outcome;
+            return React.createElement(TouchableOpacity, {
+              key: outcome,
+              onPress: function() { setSelected(outcome); },
+              componentId: 'result-option-' + outcome,
+              style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 12, borderWidth: 2, borderColor: isSelected ? OUTCOME_COLORS[outcome] : borderColor, backgroundColor: isSelected ? 'rgba(59,130,246,0.1)' : '#0F172A', marginBottom: 10 }
+            },
+              React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+                React.createElement(View, { style: { width: 10, height: 10, borderRadius: 5, backgroundColor: OUTCOME_COLORS[outcome], marginRight: 12 } }),
+                React.createElement(Text, { style: { fontSize: 15, fontWeight: '600', color: textPrimary } }, OUTCOME_LABELS[outcome])
+              ),
+              React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+                isPredicted ? React.createElement(View, { style: { backgroundColor: '#1E3A8A', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginRight: 8 } },
+                  React.createElement(Text, { style: { fontSize: 11, color: '#93C5FD', fontWeight: '600' } }, 'AI Pick')
+                ) : null,
+                isSelected ? React.createElement(MaterialIcons, { name: 'check-circle', size: 20, color: OUTCOME_COLORS[outcome] }) : null
+              )
+            );
+          }),
+          React.createElement(View, { style: { flexDirection: 'row', marginTop: 8 } },
+            React.createElement(TouchableOpacity, { onPress: onClose, componentId: 'result-cancel', style: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: borderColor, alignItems: 'center', marginRight: 8 } },
+              React.createElement(Text, { style: { color: textSecondary, fontWeight: '600', fontSize: 15 } }, 'Cancel')
+            ),
+            React.createElement(TouchableOpacity, {
+              onPress: function() { if (selected) { onSave(selected); } else { Platform.OS === 'web' ? window.alert('Please select a result.') : Alert.alert('Select Result', 'Please select the actual match result.'); } },
+              componentId: 'result-save',
+              style: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: selected ? primaryColor : '#334155', alignItems: 'center', marginLeft: 8 }
+            },
+              React.createElement(Text, { style: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 } }, 'Save Result')
+            )
+          )
+        )
+      )
+    );
+  };
+  // @end:ResultModal
+
+  // @section:PredictionCard @depends:[static-data,styles]
+  var PredictionCard = function(props) {
+    var item = props.item;
+    var onPress = props.onPress;
+    var showResult = props.showResult;
+    var isCorrect = item.actual_result && item.predicted_outcome === item.actual_result;
+    var isWrong = item.actual_result && item.predicted_outcome !== item.actual_result;
+    var borderCol = item.actual_result ? (isCorrect ? successColor : errorColor) : borderColor;
+    return React.createElement(TouchableOpacity, {
+      onPress: onPress,
+      componentId: 'prediction-card-' + item.id,
+      style: { backgroundColor: cardColor, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: borderCol, borderLeftWidth: 4 },
+      activeOpacity: 0.85
+    },
+      React.createElement(View, { style: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 } },
+        React.createElement(View, { style: { flex: 1 } },
+          React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 } },
+            React.createElement(Text, { style: { fontSize: 13 } }, getLeagueFlag(item.league)),
+            React.createElement(Text, { style: { fontSize: 12, color: textSecondary, marginLeft: 6 } }, getLeagueName(item.league))
+          ),
+          React.createElement(Text, { style: { fontSize: 14, color: textSecondary } }, formatDate(item.match_date))
+        ),
+        item.actual_result
+          ? React.createElement(View, { style: { backgroundColor: isCorrect ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 } },
+              React.createElement(Text, { style: { fontSize: 12, fontWeight: 'bold', color: isCorrect ? successColor : errorColor } }, isCorrect ? '✓ Correct' : '✗ Wrong')
+            )
+          : React.createElement(View, { style: { backgroundColor: 'rgba(245,158,11,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 } },
+              React.createElement(Text, { style: { fontSize: 12, fontWeight: '600', color: warningColor } }, 'Pending')
+            )
+      ),
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 } },
+        React.createElement(View, { style: { flex: 1, alignItems: 'center' } },
+          React.createElement(Text, { style: { fontSize: 16, fontWeight: 'bold', color: textPrimary, textAlign: 'center' } }, item.home_team),
+          React.createElement(Text, { style: { fontSize: 11, color: textSecondary, marginTop: 2 } }, 'HOME')
+        ),
+        React.createElement(View, { style: { paddingHorizontal: 16 } },
+          React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textSecondary } }, 'VS')
+        ),
+        React.createElement(View, { style: { flex: 1, alignItems: 'center' } },
+          React.createElement(Text, { style: { fontSize: 16, fontWeight: 'bold', color: textPrimary, textAlign: 'center' } }, item.away_team),
+          React.createElement(Text, { style: { fontSize: 11, color: textSecondary, marginTop: 2 } }, 'AWAY')
+        )
+      ),
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' } },
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', flex: 1 } },
+          React.createElement(View, { style: { width: 8, height: 8, borderRadius: 4, backgroundColor: OUTCOME_COLORS[item.predicted_outcome], marginRight: 8 } }),
+          React.createElement(Text, { style: { fontSize: 13, color: textSecondary } }, 'AI: '),
+          React.createElement(Text, { style: { fontSize: 13, fontWeight: '700', color: OUTCOME_COLORS[item.predicted_outcome] } }, OUTCOME_LABELS[item.predicted_outcome])
+        ),
+        React.createElement(View, { style: { backgroundColor: '#1E3A8A', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 } },
+          React.createElement(Text, { style: { fontSize: 12, fontWeight: 'bold', color: '#93C5FD' } }, item.confidence + '% conf.')
+        )
+      ),
+      item.actual_result && showResult
+        ? React.createElement(View, { style: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: borderColor, flexDirection: 'row', alignItems: 'center' } },
+            React.createElement(Text, { style: { fontSize: 12, color: textSecondary } }, 'Actual: '),
+            React.createElement(Text, { style: { fontSize: 13, fontWeight: '700', color: OUTCOME_COLORS[item.actual_result] } }, OUTCOME_LABELS[item.actual_result])
+          )
+        : null,
+      !item.actual_result && onPress
+        ? React.createElement(View, { style: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: borderColor, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' } },
+            React.createElement(MaterialIcons, { name: 'touch-app', size: 14, color: accentColor }),
+            React.createElement(Text, { style: { fontSize: 12, color: accentColor, marginLeft: 4 } }, 'Tap to record result')
+          )
+        : null
+    );
+  };
+  // @end:PredictionCard
+
+  // @section:NewPredictionScreen-state @depends:[ThemeContext]
+  var useNewPredictionState = function() {
+    var homeTeamState = useState('');
+    var awayTeamState = useState('');
+    var leagueState = useState('epl');
+    var matchDateState = useState('');
+    var loadingState = useState(false);
+    var resultState = useState(null);
+    var showLeaguePickerState = useState(false);
+    return {
+      homeTeam: homeTeamState[0], setHomeTeam: homeTeamState[1],
+      awayTeam: awayTeamState[0], setAwayTeam: awayTeamState[1],
+      league: leagueState[0], setLeague: leagueState[1],
+      matchDate: matchDateState[0], setMatchDate: matchDateState[1],
+      loading: loadingState[0], setLoading: loadingState[1],
+      result: resultState[0], setResult: resultState[1],
+      showLeaguePicker: showLeaguePickerState[0], setShowLeaguePicker: showLeaguePickerState[1]
+    };
+  };
+  // @end:NewPredictionScreen-state
+
+  // @section:NewPredictionScreen-handlers @depends:[NewPredictionScreen-state]
+  var buildPredictionPrompt = function(homeTeam, awayTeam, leagueName, matchDate) {
+    return 'You are a sports analytics AI specializing in football/soccer match predictions. Analyze the upcoming match and provide a prediction in JSON format only.\n\nMatch Details:\n- Home Team: ' + homeTeam + '\n- Away Team: ' + awayTeam + '\n- League: ' + leagueName + '\n- Date: ' + matchDate + '\n\nRespond with ONLY valid JSON in this exact format:\n{\n  "prediction": "home_win" | "draw" | "away_win",\n  "confidence": <number 50-95>,\n  "home_win_prob": <percentage 0-100>,\n  "draw_prob": <percentage 0-100>,\n  "away_win_prob": <percentage 0-100>,\n  "reasoning": "<2-3 sentences analyzing key factors like recent form, home advantage, head-to-head record, squad strength>"\n}\nBase your analysis on general knowledge of these teams. Ensure probabilities sum to 100.';
+  };
+
+  var callAIPrediction = function(homeTeam, awayTeam, league, matchDate, setState) {
+    var leagueName = getLeagueName(league);
+    setState.setLoading(true);
+    setState.setResult(null);
+    fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + AppSecrets.OPENAI_API_KEY
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: buildPredictionPrompt(homeTeam, awayTeam, leagueName, matchDate || 'upcoming') }],
+        temperature: 0.7,
+        max_tokens: 300
+      })
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+      if (data.error) { throw new Error(data.error.message || 'API Error'); }
+      var content = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : '';
+      var jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) { throw new Error('Invalid response format'); }
+      var parsed = JSON.parse(jsonMatch[0]);
+      if (!parsed.prediction || !['home_win','draw','away_win'].includes(parsed.prediction)) {
+        throw new Error('Invalid prediction format');
+      }
+      setState.setResult({
+        predicted_outcome: parsed.prediction,
+        confidence: Math.min(95, Math.max(50, parseInt(parsed.confidence, 10) || 70)),
+        home_win_prob: parsed.home_win_prob || 33,
+        draw_prob: parsed.draw_prob || 33,
+        away_win_prob: parsed.away_win_prob || 34,
+        reasoning: parsed.reasoning || 'AI analysis complete.'
+      });
+      setState.setLoading(false);
+    })
+    .catch(function(err) {
+      setState.setLoading(false);
+      Platform.OS === 'web' ? window.alert('Prediction failed: ' + err.message) : Alert.alert('Prediction Error', err.message);
+    });
+  };
+  // @end:NewPredictionScreen-handlers
+
+  // @section:NewPredictionScreen-PredictionResult @depends:[static-data,styles]
+  var PredictionResult = function(props) {
+    var result = props.result;
+    var homeTeam = props.homeTeam;
+    var awayTeam = props.awayTeam;
+    var onSave = props.onSave;
+    var saveLoading = props.saveLoading;
+    if (!result) return null;
+    var total = result.home_win_prob + result.draw_prob + result.away_win_prob;
+    var homeW = Math.round((result.home_win_prob / total) * 100);
+    var drawW = Math.round((result.draw_prob / total) * 100);
+    var awayW = 100 - homeW - drawW;
+    return React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 20, padding: 20, marginTop: 8, borderWidth: 1, borderColor: OUTCOME_COLORS[result.predicted_outcome] + '66' }, componentId: 'prediction-result-card' },
+      React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 } },
+        React.createElement(MaterialIcons, { name: 'auto-awesome', size: 20, color: '#FBBF24', style: { marginRight: 8 } }),
+        React.createElement(Text, { style: { fontSize: 16, fontWeight: 'bold', color: textPrimary } }, 'AI Prediction Ready')
+      ),
+      React.createElement(View, { style: { alignItems: 'center', marginBottom: 20, backgroundColor: '#0F172A', borderRadius: 16, padding: 20 } },
+        React.createElement(View, { style: { backgroundColor: OUTCOME_COLORS[result.predicted_outcome] + '22', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 30, marginBottom: 8, borderWidth: 1, borderColor: OUTCOME_COLORS[result.predicted_outcome] } },
+          React.createElement(Text, { style: { fontSize: 22, fontWeight: 'bold', color: OUTCOME_COLORS[result.predicted_outcome] } }, OUTCOME_LABELS[result.predicted_outcome])
+        ),
+        React.createElement(Text, { style: { fontSize: 14, color: textSecondary } }, 'Confidence: '),
+        React.createElement(Text, { style: { fontSize: 28, fontWeight: 'bold', color: textPrimary } }, result.confidence + '%')
+      ),
+      React.createElement(Text, { style: { fontSize: 13, fontWeight: '600', color: textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 } }, 'Probabilities'),
+      React.createElement(View, { style: { marginBottom: 16 } },
+        [
+          { label: homeTeam || 'Home', value: homeW, color: successColor },
+          { label: 'Draw', value: drawW, color: warningColor },
+          { label: awayTeam || 'Away', value: awayW, color: accentColor }
+        ].map(function(item, i) {
+          return React.createElement(View, { key: String(i), style: { marginBottom: 10 } },
+            React.createElement(View, { style: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 } },
+              React.createElement(Text, { style: { fontSize: 13, color: textPrimary, fontWeight: '500' } }, item.label),
+              React.createElement(Text, { style: { fontSize: 13, fontWeight: 'bold', color: item.color } }, item.value + '%')
+            ),
+            React.createElement(View, { style: { height: 6, backgroundColor: '#0F172A', borderRadius: 3, overflow: 'hidden' } },
+              React.createElement(View, { style: { height: 6, width: item.value + '%', backgroundColor: item.color, borderRadius: 3 } })
+            )
+          );
+        })
+      ),
+      React.createElement(View, { style: { backgroundColor: '#0F172A', borderRadius: 12, padding: 14, marginBottom: 16 } },
+        React.createElement(Text, { style: { fontSize: 12, fontWeight: '600', color: textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.8 } }, 'Analysis'),
+        React.createElement(Text, { style: { fontSize: 13, color: textPrimary, lineHeight: 20 } }, result.reasoning)
+      ),
+      React.createElement(TouchableOpacity, {
+        onPress: onSave,
+        componentId: 'save-prediction-btn',
+        disabled: saveLoading,
+        style: { backgroundColor: saveLoading ? '#334155' : primaryColor, borderRadius: 14, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }
+      },
+        saveLoading ? React.createElement(ActivityIndicator, { color: '#FFFFFF', size: 'small', style: { marginRight: 8 } }) : React.createElement(MaterialIcons, { name: 'save', size: 20, color: '#FFFFFF', style: { marginRight: 8 } }),
+        React.createElement(Text, { style: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' } }, saveLoading ? 'Saving...' : 'Save Prediction')
+      )
+    );
+  };
+  // @end:NewPredictionScreen-PredictionResult
+
+  // @section:NewPredictionScreen @depends:[NewPredictionScreen-state,NewPredictionScreen-handlers,NewPredictionScreen-PredictionResult,DatePickerInput,LeaguePickerModal,styles]
+  var NewPredictionScreen = function(props) {
+    var state = useNewPredictionState();
+    var themeCtx = useTheme();
+    var theme = themeCtx.theme;
+    var insets = useSafeAreaInsets();
+    var insertPrediction = useMutation('predictions', 'insert');
+    var mutate = insertPrediction.mutate;
+    var saveLoadingState = useState(false);
+    var saveLoading = saveLoadingState[0];
+    var setSaveLoading = saveLoadingState[1];
+    var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+    var screenH = Dimensions.get('window').height;
+    var scrollH = screenH - insets.top - (Platform.OS === 'web' ? 0 : 0);
+
+    var handlePredict = function() {
+      if (!state.homeTeam.trim() || !state.awayTeam.trim()) {
+        Platform.OS === 'web' ? window.alert('Please enter both team names.') : Alert.alert('Missing Info', 'Please enter both team names.');
+        return;
+      }
+      if (state.homeTeam.trim().toLowerCase() === state.awayTeam.trim().toLowerCase()) {
+        Platform.OS === 'web' ? window.alert('Home and away teams must be different.') : Alert.alert('Invalid Match', 'Home and away teams must be different.');
+        return;
+      }
+      callAIPrediction(state.homeTeam.trim(), state.awayTeam.trim(), state.league, state.matchDate, state);
+    };
+
+    var handleSave = function() {
+      if (!state.result) return;
+      setSaveLoading(true);
+      var newPred = {
+        id: generateId(),
+        home_team: state.homeTeam.trim(),
+        away_team: state.awayTeam.trim(),
+        league: state.league,
+        match_date: state.matchDate || '',
+        predicted_outcome: state.result.predicted_outcome,
+        confidence: state.result.confidence,
+        home_win_prob: state.result.home_win_prob,
+        draw_prob: state.result.draw_prob,
+        away_win_prob: state.result.away_win_prob,
+        reasoning: state.result.reasoning,
+        actual_result: '',
+        created_at: new Date().toISOString()
+      };
+      mutate(newPred)
+        .then(function() {
+          setSaveLoading(false);
+          state.setHomeTeam('');
+          state.setAwayTeam('');
+          state.setMatchDate('');
+          state.setResult(null);
+          Platform.OS === 'web' ? window.alert('Prediction saved!') : Alert.alert('Saved!', 'Your prediction has been saved. Record the result after the match!');
+        })
+        .catch(function(err) {
+          setSaveLoading(false);
+          Platform.OS === 'web' ? window.alert('Save failed: ' + err.message) : Alert.alert('Error', err.message);
+        });
+    };
+
+    var selectedLeague = LEAGUES.filter(function(l) { return l.id === state.league; })[0] || LEAGUES[0];
+
+    return React.createElement(View, { style: { flex: 1, backgroundColor: theme.colors.background } },
+      React.createElement(View, { style: { backgroundColor: '#0A1628', paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: borderColor }, componentId: 'new-pred-header' },
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+          React.createElement(View, { style: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1E3A8A', alignItems: 'center', justifyContent: 'center', marginRight: 12 } },
+            React.createElement(MaterialIcons, { name: 'auto-awesome', size: 20, color: '#93C5FD' })
+          ),
+          React.createElement(View, null,
+            React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textPrimary } }, 'New Prediction'),
+            React.createElement(Text, { style: { fontSize: 12, color: textSecondary, marginTop: 1 } }, 'AI-powered match analysis')
+          )
+        )
+      ),
+      React.createElement(ScrollView, {
+        style: Platform.OS === 'web' ? { height: scrollH - 120, overflow: 'auto' } : { flex: 1 },
+        contentContainerStyle: { padding: 20, paddingBottom: scrollBottomPadding },
+        showsVerticalScrollIndicator: false
+      },
+        React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: borderColor }, componentId: 'match-form-card' },
+          React.createElement(Text, { style: { fontSize: 14, fontWeight: '700', color: textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 } }, 'Match Details'),
+          React.createElement(View, { style: { marginBottom: 14 } },
+            React.createElement(Text, { style: { fontSize: 13, color: textSecondary, marginBottom: 6, fontWeight: '600' } }, '🏠 Home Team'),
+            React.createElement(TextInput, { value: state.homeTeam, onChangeText: state.setHomeTeam, placeholder: 'e.g. Manchester City', placeholderTextColor: '#475569', style: { backgroundColor: '#0F172A', borderWidth: 1, borderColor: borderColor, borderRadius: 10, padding: 14, fontSize: 15, color: textPrimary }, autoCapitalize: 'words', autoCorrect: false, componentId: 'input-home-team' })
+          ),
+          React.createElement(View, { style: { marginBottom: 14 } },
+            React.createElement(Text, { style: { fontSize: 13, color: textSecondary, marginBottom: 6, fontWeight: '600' } }, '✈️ Away Team'),
+            React.createElement(TextInput, { value: state.awayTeam, onChangeText: state.setAwayTeam, placeholder: 'e.g. Arsenal', placeholderTextColor: '#475569', style: { backgroundColor: '#0F172A', borderWidth: 1, borderColor: borderColor, borderRadius: 10, padding: 14, fontSize: 15, color: textPrimary }, autoCapitalize: 'words', autoCorrect: false, componentId: 'input-away-team' })
+          ),
+          React.createElement(View, { style: { marginBottom: 14 } },
+            React.createElement(Text, { style: { fontSize: 13, color: textSecondary, marginBottom: 6, fontWeight: '600' } }, '🏆 League'),
+            React.createElement(TouchableOpacity, {
+              onPress: function() { state.setShowLeaguePicker(true); },
+              componentId: 'league-selector',
+              style: { backgroundColor: '#0F172A', borderWidth: 1, borderColor: borderColor, borderRadius: 10, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
+            },
+              React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+                React.createElement(Text, { style: { fontSize: 18, marginRight: 10 } }, selectedLeague.flag),
+                React.createElement(Text, { style: { fontSize: 15, color: textPrimary, fontWeight: '500' } }, selectedLeague.name)
+              ),
+              React.createElement(MaterialIcons, { name: 'keyboard-arrow-down', size: 22, color: textSecondary })
+            )
+          ),
+          React.createElement(View, { style: { marginBottom: 4 } },
+            React.createElement(Text, { style: { fontSize: 13, color: textSecondary, marginBottom: 6, fontWeight: '600' } }, '📅 Match Date (Optional)'),
+            React.createElement(DatePickerInput, { value: state.matchDate, onChange: state.setMatchDate, placeholder: 'Select match date', componentId: 'input-match-date' })
+          )
+        ),
+        React.createElement(TouchableOpacity, {
+          onPress: handlePredict,
+          componentId: 'predict-btn',
+          disabled: state.loading,
+          style: { backgroundColor: state.loading ? '#334155' : primaryColor, borderRadius: 16, padding: 18, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', marginBottom: 16, shadowColor: '#1E40AF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 }
+        },
+          state.loading
+            ? React.createElement(ActivityIndicator, { color: '#FFFFFF', size: 'small', style: { marginRight: 10 } })
+            : React.createElement(MaterialIcons, { name: 'psychology', size: 22, color: '#FFFFFF', style: { marginRight: 10 } }),
+          React.createElement(Text, { style: { color: '#FFFFFF', fontSize: 17, fontWeight: 'bold' } }, state.loading ? 'Analyzing Match...' : 'Get AI Prediction')
+        ),
+        state.loading
+          ? React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: borderColor }, componentId: 'loading-card' },
+              React.createElement(ActivityIndicator, { size: 'large', color: accentColor, style: { marginBottom: 16 } }),
+              React.createElement(Text, { style: { fontSize: 16, fontWeight: '600', color: textPrimary, marginBottom: 8 } }, 'AI is analyzing...'),
+              React.createElement(Text, { style: { fontSize: 13, color: textSecondary, textAlign: 'center' } }, 'Processing team form, head-to-head records, and tactical factors')
+            )
+          : null,
+        state.result
+          ? React.createElement(PredictionResult, { result: state.result, homeTeam: state.homeTeam, awayTeam: state.awayTeam, onSave: handleSave, saveLoading: saveLoading })
+          : null
+      ),
+      React.createElement(LeaguePickerModal, { visible: state.showLeaguePicker, onClose: function() { state.setShowLeaguePicker(false); }, onSelect: state.setLeague, selected: state.league })
+    );
+  };
+  // @end:NewPredictionScreen
+
+  // @section:PendingScreen @depends:[PredictionCard,ResultModal,styles]
+  var PendingScreen = function(props) {
+    var themeCtx = useTheme();
+    var theme = themeCtx.theme;
+    var insets = useSafeAreaInsets();
+    var queryResult = useQuery('predictions');
+    var allData = queryResult.data;
+    var loading = queryResult.loading;
+    var refetch = queryResult.refetch;
+    var updateMutation = useMutation('predictions', 'update');
+    var updateMutate = updateMutation.mutate;
+    var modalState = useState(false);
+    var showModal = modalState[0];
+    var setShowModal = modalState[1];
+    var selectedPredState = useState(null);
+    var selectedPred = selectedPredState[0];
+    var setSelectedPred = selectedPredState[1];
+    var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+    var screenH = Dimensions.get('window').height;
+
+    var pendingPredictions = useMemo(function() {
+      if (!allData || allData.length === 0) return [];
+      return allData.filter(function(p) { return !p.actual_result || p.actual_result === ''; }).sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+    }, [allData]);
+
+    var handleSelectPred = function(pred) {
+      setSelectedPred(pred);
+      setShowModal(true);
+    };
+
+    var handleSaveResult = function(outcome) {
+      if (!selectedPred) return;
+      updateMutate({ id: selectedPred.id, data: { actual_result: outcome } })
+        .then(function() {
+          setShowModal(false);
+          setSelectedPred(null);
+          refetch();
+        })
+        .catch(function(err) {
+          Platform.OS === 'web' ? window.alert('Update failed: ' + err.message) : Alert.alert('Error', err.message);
+        });
+    };
+
+    return React.createElement(View, { style: { flex: 1, backgroundColor: theme.colors.background } },
+      React.createElement(View, { style: { backgroundColor: '#0A1628', paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: borderColor }, componentId: 'pending-header' },
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' } },
+          React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+            React.createElement(View, { style: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(245,158,11,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 12 } },
+              React.createElement(MaterialIcons, { name: 'pending-actions', size: 20, color: warningColor })
+            ),
+            React.createElement(View, null,
+              React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textPrimary } }, 'Pending Results'),
+              React.createElement(Text, { style: { fontSize: 12, color: textSecondary, marginTop: 1 } }, 'Record actual match outcomes')
+            )
+          ),
+          pendingPredictions.length > 0
+            ? React.createElement(View, { style: { backgroundColor: warningColor, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' } },
+                React.createElement(Text, { style: { color: '#000', fontSize: 13, fontWeight: 'bold' } }, String(pendingPredictions.length))
+              )
+            : null
+        )
+      ),
+      loading
+        ? React.createElement(View, { style: { flex: 1, alignItems: 'center', justifyContent: 'center' }, componentId: 'loading' },
+            React.createElement(ActivityIndicator, { size: 'large', color: accentColor })
+          )
+        : pendingPredictions.length === 0
+          ? React.createElement(View, { style: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }, componentId: 'empty-pending' },
+              React.createElement(View, { style: { width: 80, height: 80, borderRadius: 40, backgroundColor: cardColor, alignItems: 'center', justifyContent: 'center', marginBottom: 20 } },
+                React.createElement(MaterialIcons, { name: 'check-circle', size: 40, color: successColor })
+              ),
+              React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textPrimary, marginBottom: 8, textAlign: 'center' } }, 'All Caught Up!'),
+              React.createElement(Text, { style: { fontSize: 14, color: textSecondary, textAlign: 'center', lineHeight: 22 } }, 'No pending results. Create new predictions or check back after your matches.')
+            )
+          : React.createElement(FlatList, {
+              data: pendingPredictions,
+              keyExtractor: function(item) { return item.id; },
+              renderItem: function(info) {
+                return React.createElement(PredictionCard, { item: info.item, onPress: function() { handleSelectPred(info.item); }, showResult: false });
+              },
+              contentContainerStyle: { padding: 16, paddingBottom: scrollBottomPadding },
+              showsVerticalScrollIndicator: false
+            }),
+      React.createElement(ResultModal, { visible: showModal, onClose: function() { setShowModal(false); setSelectedPred(null); }, onSave: handleSaveResult, prediction: selectedPred })
+    );
+  };
+  // @end:PendingScreen
+
+  // @section:StatsCard @depends:[styles]
+  var StatsCard = function(props) {
+    return React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 16, padding: 18, flex: 1, borderWidth: 1, borderColor: borderColor }, componentId: props.componentId },
+      React.createElement(Text, { style: { fontSize: 11, color: textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, fontWeight: '600' } }, props.label),
+      React.createElement(Text, { style: { fontSize: 30, fontWeight: 'bold', color: props.color || textPrimary } }, props.value),
+      props.sub ? React.createElement(Text, { style: { fontSize: 12, color: textSecondary, marginTop: 4 } }, props.sub) : null
+    );
+  };
+  // @end:StatsCard
+
+  // @section:HistoryScreen @depends:[PredictionCard,StatsCard,styles]
+  var HistoryScreen = function(props) {
+    var themeCtx = useTheme();
+    var theme = themeCtx.theme;
+    var insets = useSafeAreaInsets();
+    var queryResult = useQuery('predictions');
+    var allData = queryResult.data;
+    var loading = queryResult.loading;
+    var filterState = useState('all');
+    var filter = filterState[0];
+    var setFilter = filterState[1];
+    var leagueFilterState = useState('all');
+    var leagueFilter = leagueFilterState[0];
+    var setLeagueFilter = leagueFilterState[1];
+    var scrollBottomPadding = Platform.OS === 'web' ? WEB_TAB_MENU_PADDING : (TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING);
+    var screenH = Dimensions.get('window').height;
+
+    var completedPredictions = useMemo(function() {
+      if (!allData || allData.length === 0) return [];
+      return allData.filter(function(p) { return p.actual_result && p.actual_result !== ''; });
+    }, [allData]);
+
+    var stats = useMemo(function() {
+      var total = completedPredictions.length;
+      var correct = completedPredictions.filter(function(p) { return p.predicted_outcome === p.actual_result; }).length;
+      var accuracy = total > 0 ? Math.round((correct / total) * 100) : 0;
+      var homeWinCorrect = completedPredictions.filter(function(p) { return p.predicted_outcome === 'home_win' && p.actual_result === 'home_win'; }).length;
+      var homeWinTotal = completedPredictions.filter(function(p) { return p.predicted_outcome === 'home_win'; }).length;
+      var drawCorrect = completedPredictions.filter(function(p) { return p.predicted_outcome === 'draw' && p.actual_result === 'draw'; }).length;
+      var drawTotal = completedPredictions.filter(function(p) { return p.predicted_outcome === 'draw'; }).length;
+      var awayWinCorrect = completedPredictions.filter(function(p) { return p.predicted_outcome === 'away_win' && p.actual_result === 'away_win'; }).length;
+      var awayWinTotal = completedPredictions.filter(function(p) { return p.predicted_outcome === 'away_win'; }).length;
+      var streak = 0;
+      var sorted = completedPredictions.slice().sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+      for (var i = 0; i < sorted.length; i++) {
+        if (sorted[i].predicted_outcome === sorted[i].actual_result) { streak++; } else { break; }
+      }
+      return { total: total, correct: correct, accuracy: accuracy, streak: streak, homeWinAcc: homeWinTotal > 0 ? Math.round((homeWinCorrect / homeWinTotal) * 100) : 0, drawAcc: drawTotal > 0 ? Math.round((drawCorrect / drawTotal) * 100) : 0, awayWinAcc: awayWinTotal > 0 ? Math.round((awayWinCorrect / awayWinTotal) * 100) : 0 };
+    }, [completedPredictions]);
+
+    var allPredictions = useMemo(function() {
+      if (!allData || allData.length === 0) return [];
+      var filtered = allData.slice();
+      if (filter === 'correct') { filtered = filtered.filter(function(p) { return p.actual_result && p.predicted_outcome === p.actual_result; }); }
+      else if (filter === 'wrong') { filtered = filtered.filter(function(p) { return p.actual_result && p.predicted_outcome !== p.actual_result; }); }
+      else if (filter === 'pending') { filtered = filtered.filter(function(p) { return !p.actual_result || p.actual_result === ''; }); }
+      if (leagueFilter !== 'all') { filtered = filtered.filter(function(p) { return p.league === leagueFilter; }); }
+      return filtered.sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+    }, [allData, filter, leagueFilter]);
+
+    var usedLeagues = useMemo(function() {
+      if (!allData) return [];
+      var ids = {};
+      allData.forEach(function(p) { ids[p.league] = true; });
+      return LEAGUES.filter(function(l) { return ids[l.id]; });
+    }, [allData]);
+
+    var filterOptions = [
+      { key: 'all', label: 'All' },
+      { key: 'correct', label: '✓ Correct' },
+      { key: 'wrong', label: '✗ Wrong' },
+      { key: 'pending', label: '⏳ Pending' }
+    ];
+
+    return React.createElement(View, { style: { flex: 1, backgroundColor: theme.colors.background } },
+      React.createElement(View, { style: { backgroundColor: '#0A1628', paddingTop: insets.top + 12, paddingBottom: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: borderColor }, componentId: 'history-header' },
+        React.createElement(View, { style: { flexDirection: 'row', alignItems: 'center' } },
+          React.createElement(View, { style: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(59,130,246,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 12 } },
+            React.createElement(Ionicons, { name: 'stats-chart', size: 20, color: accentColor })
+          ),
+          React.createElement(View, null,
+            React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textPrimary } }, 'History & Stats'),
+            React.createElement(Text, { style: { fontSize: 12, color: textSecondary, marginTop: 1 } }, 'Track your prediction accuracy')
+          )
+        )
+      ),
+      loading
+        ? React.createElement(View, { style: { flex: 1, alignItems: 'center', justifyContent: 'center' }, componentId: 'loading' },
+            React.createElement(ActivityIndicator, { size: 'large', color: accentColor })
+          )
+        : React.createElement(ScrollView, {
+            style: Platform.OS === 'web' ? { height: screenH - insets.top - 80, overflow: 'auto' } : { flex: 1 },
+            contentContainerStyle: { paddingBottom: scrollBottomPadding },
+            showsVerticalScrollIndicator: false
+          },
+            completedPredictions.length > 0
+              ? React.createElement(View, { style: { padding: 16 } },
+                  React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 20, padding: 20, marginBottom: 16, alignItems: 'center', borderWidth: 1, borderColor: accentColor + '44' }, componentId: 'accuracy-hero' },
+                    React.createElement(Text, { style: { fontSize: 13, color: textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 } }, 'Overall Accuracy'),
+                    React.createElement(Text, { style: { fontSize: 64, fontWeight: 'bold', color: stats.accuracy >= 60 ? successColor : stats.accuracy >= 40 ? warningColor : errorColor } }, stats.accuracy + '%'),
+                    React.createElement(Text, { style: { fontSize: 14, color: textSecondary } }, stats.correct + ' correct out of ' + stats.total + ' completed'),
+                    stats.streak > 1
+                      ? React.createElement(View, { style: { backgroundColor: 'rgba(251,191,36,0.15)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginTop: 10, borderWidth: 1, borderColor: warningColor + '66' } },
+                          React.createElement(Text, { style: { color: warningColor, fontSize: 13, fontWeight: '700' } }, '🔥 ' + stats.streak + ' prediction streak!')
+                        )
+                      : null
+                  ),
+                  React.createElement(View, { style: { flexDirection: 'row', gap: 12, marginBottom: 16 } },
+                    React.createElement(StatsCard, { label: 'Predictions', value: String(stats.total), sub: 'total made', componentId: 'stat-total' }),
+                    React.createElement(StatsCard, { label: 'Correct', value: String(stats.correct), color: successColor, sub: 'predictions right', componentId: 'stat-correct' })
+                  ),
+                  React.createElement(View, { style: { backgroundColor: cardColor, borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: borderColor }, componentId: 'outcome-accuracy-card' },
+                    React.createElement(Text, { style: { fontSize: 13, fontWeight: '700', color: textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 } }, 'Accuracy by Outcome'),
+                    [
+                      { label: 'Home Win', acc: stats.homeWinAcc, color: successColor },
+                      { label: 'Draw', acc: stats.drawAcc, color: warningColor },
+                      { label: 'Away Win', acc: stats.awayWinAcc, color: accentColor }
+                    ].map(function(item, i) {
+                      return React.createElement(View, { key: String(i), style: { marginBottom: 12 } },
+                        React.createElement(View, { style: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 } },
+                          React.createElement(Text, { style: { fontSize: 14, color: textPrimary, fontWeight: '500' } }, item.label),
+                          React.createElement(Text, { style: { fontSize: 14, fontWeight: 'bold', color: item.color } }, item.acc + '%')
+                        ),
+                        React.createElement(View, { style: { height: 8, backgroundColor: '#0F172A', borderRadius: 4, overflow: 'hidden' } },
+                          React.createElement(View, { style: { height: 8, width: item.acc + '%', backgroundColor: item.color, borderRadius: 4 } })
+                        )
+                      );
+                    })
+                  )
+                )
+              : null,
+            React.createElement(View, { style: { paddingHorizontal: 16, marginBottom: 8 } },
+              React.createElement(ScrollView, { horizontal: true, showsHorizontalScrollIndicator: false, style: { flexGrow: 'initial', marginBottom: 10 } },
+                filterOptions.map(function(opt) {
+                  var isActive = filter === opt.key;
+                  return React.createElement(TouchableOpacity, {
+                    key: opt.key,
+                    onPress: function() { setFilter(opt.key); },
+                    componentId: 'filter-' + opt.key,
+                    style: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: isActive ? primaryColor : cardColor, borderWidth: 1, borderColor: isActive ? primaryColor : borderColor, marginRight: 8 }
+                  },
+                    React.createElement(Text, { style: { fontSize: 13, color: isActive ? '#FFFFFF' : textSecondary, fontWeight: isActive ? '700' : '400' } }, opt.label)
+                  );
+                })
+              ),
+              usedLeagues.length > 1
+                ? React.createElement(ScrollView, { horizontal: true, showsHorizontalScrollIndicator: false, style: { flexGrow: 'initial', marginBottom: 10 } },
+                    React.createElement(TouchableOpacity, {
+                      onPress: function() { setLeagueFilter('all'); },
+                      componentId: 'league-filter-all',
+                      style: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: leagueFilter === 'all' ? accentColor + '33' : 'transparent', borderWidth: 1, borderColor: leagueFilter === 'all' ? accentColor : borderColor, marginRight: 6 }
+                    },
+                      React.createElement(Text, { style: { fontSize: 12, color: leagueFilter === 'all' ? accentColor : textSecondary } }, '🌍 All Leagues')
+                    ),
+                    usedLeagues.map(function(league) {
+                      var isActive = leagueFilter === league.id;
+                      return React.createElement(TouchableOpacity, {
+                        key: league.id,
+                        onPress: function() { setLeagueFilter(league.id); },
+                        componentId: 'league-filter-' + league.id,
+                        style: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: isActive ? accentColor + '33' : 'transparent', borderWidth: 1, borderColor: isActive ? accentColor : borderColor, marginRight: 6 }
+                      },
+                        React.createElement(Text, { style: { fontSize: 12, color: isActive ? accentColor : textSecondary } }, league.flag + ' ' + league.name)
+                      );
+                    })
+                  )
+                : null
+            ),
+            allPredictions.length === 0
+              ? React.createElement(View, { style: { alignItems: 'center', justifyContent: 'center', padding: 40 }, componentId: 'empty-history' },
+                  React.createElement(View, { style: { width: 80, height: 80, borderRadius: 40, backgroundColor: cardColor, alignItems: 'center', justifyContent: 'center', marginBottom: 20 } },
+                    React.createElement(MaterialIcons, { name: 'history', size: 40, color: textSecondary })
+                  ),
+                  React.createElement(Text, { style: { fontSize: 20, fontWeight: 'bold', color: textPrimary, marginBottom: 8, textAlign: 'center' } }, 'No Predictions Yet'),
+                  React.createElement(Text, { style: { fontSize: 14, color: textSecondary, textAlign: 'center', lineHeight: 22 } }, 'Your prediction history will appear here. Get started by creating your first prediction!')
+                )
+              : React.createElement(View, { style: { paddingHorizontal: 16 } },
+                  React.createElement(Text, { style: { fontSize: 13, color: textSecondary, marginBottom: 12 } }, allPredictions.length + ' prediction' + (allPredictions.length !== 1 ? 's' : '')),
+                  allPredictions.map(function(item) {
+                    return React.createElement(PredictionCard, { key: item.id, item: item, onPress: null, showResult: true });
+                  })
+                )
+          )
+    );
+  };
+  // @end:HistoryScreen
+
+  // @section:styles @depends:[theme]
+  var styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: backgroundColor
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: primaryColor,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#1E40AF',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.5,
+      shadowRadius: 8,
+      elevation: 8
+    }
+  });
+  // @end:styles
+
+  // @section:TabNavigator @depends:[NewPredictionScreen,PendingScreen,HistoryScreen,navigation-setup]
+  var TabNavigator = function() {
+    var insets = useSafeAreaInsets();
+    var themeCtx = useTheme();
+    var theme = themeCtx.theme;
+    return React.createElement(View, { style: { flex: 1, width: '100%', height: '100%', overflow: 'hidden' } },
+      React.createElement(Tab.Navigator, {
+        screenOptions: {
+          headerShown: false,
+          tabBarStyle: {
+            position: 'absolute',
+            bottom: 0,
+            height: Platform.OS === 'web' ? TAB_MENU_HEIGHT : TAB_MENU_HEIGHT + insets.bottom,
+            borderTopWidth: 0,
+            backgroundColor: '#0A1628',
+            borderTopColor: borderColor,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.4,
+            shadowRadius: 8,
+            elevation: 10
+          },
+          tabBarItemStyle: { padding: 0 },
+          tabBarActiveTintColor: accentColor,
+          tabBarInactiveTintColor: textSecondary
+        }
+      },
+        React.createElement(Tab.Screen, {
+          name: 'Predict',
+          component: NewPredictionScreen,
+          options: {
+            tabBarLabel: 'Predict',
+            tabBarIcon: function(p) { return React.createElement(MaterialIcons, { name: 'psychology', size: 24, color: p.color }); }
+          }
+        }),
+        React.createElement(Tab.Screen, {
+          name: 'Pending',
+          component: PendingScreen,
+          options: {
+            tabBarLabel: 'Pending',
+            tabBarIcon: function(p) { return React.createElement(MaterialIcons, { name: 'pending-actions', size: 24, color: p.color }); }
+          }
+        }),
+        React.createElement(Tab.Screen, {
+          name: 'History',
+          component: HistoryScreen,
+          options: {
+            tabBarLabel: 'History',
+            tabBarIcon: function(p) { return React.createElement(Ionicons, { name: 'stats-chart', size: 24, color: p.color }); }
+          }
+        })
+      )
+    );
+  };
+  // @end:TabNavigator
+
+  // @section:return @depends:[ThemeProvider,TabNavigator]
+  return React.createElement(ThemeProvider, null,
+    React.createElement(View, { style: { flex: 1, width: '100%', height: '100%', backgroundColor: backgroundColor } },
+      React.createElement(StatusBar, { barStyle: 'light-content', backgroundColor: '#0A1628' }),
+      React.createElement(TabNavigator)
+    )
+  );
+  // @end:return
+};
+return ComponentFunction;
+// @secrets-summary: [{"key":"OPENAI_API_KEY","description":"Used to call OpenAI chat completions API for AI-powered match outcome predictions and analysis."
+abdalla from 01205880777
